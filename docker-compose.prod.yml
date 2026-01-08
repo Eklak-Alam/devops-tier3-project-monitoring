@@ -1,33 +1,35 @@
 version: '3.8'
 
 services:
-  # --- APP STACK ---
+  # --- BACKEND ---
   backend:
-    image: your_dockerhub_username/gaprio-backend:latest
+    image: eklakalam/devops-tier3-monitoring-backend:latest
     restart: always
+    ports:
+      - "5000:5000"
     environment:
       - DB_HOST=db
       - DB_USER=root
-      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PASSWORD=${DB_PASSWORD}  # <--- Injected from .env
       - DB_NAME=webapp
-      - CORS_ORIGIN=*
-    ports:
-      - "5000:5000"
     depends_on:
       - db
     networks:
       - gaprio_net
 
+  # --- FRONTEND ---
   frontend:
-    image: your_dockerhub_username/gaprio-frontend:latest
+    image: eklakalam/devops-tier3-monitoring-frontend:latest
     restart: always
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:5000
     ports:
       - "3000:3000"
+    environment:
+      # CRITICAL: This allows the browser to find your API on the public internet
+      - NEXT_PUBLIC_API_URL=http://${SERVER_IP}:5000 
     networks:
       - gaprio_net
 
+  # --- DATABASE ---
   db:
     image: mysql:8.0
     restart: always
@@ -39,14 +41,15 @@ services:
     networks:
       - gaprio_net
 
-  # --- MONITORING STACK ---
+  # --- MONITORING ---
   prometheus:
     image: prom/prometheus:latest
     restart: always
     volumes:
+      # We will SCP this file to the server in the pipeline
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
-      - "9090:9090" # Access at http://YOUR_IP:9090
+      - "9090:9090"
     networks:
       - gaprio_net
 
@@ -54,7 +57,7 @@ services:
     image: grafana/grafana:latest
     restart: always
     ports:
-      - "3001:3000" # Access at http://YOUR_IP:3001 (Default User: admin/admin)
+      - "3001:3000"
     depends_on:
       - prometheus
     volumes:
