@@ -28,7 +28,7 @@ const apiCall = async (endpoint, method = 'GET', body = null) => {
   }
 };
 
-// --- 2. ICONS (Inline SVGs for performance) ---
+// --- 2. ICONS ---
 const Icons = {
   User: () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>,
   Edit: () => <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>,
@@ -43,7 +43,7 @@ export default function UserManagement() {
   const [editingId, setEditingId] = useState(null);
   const [status, setStatus] = useState({ msg: "Initializing...", type: "idle" });
 
-  // --- FIXED: Use useCallback to stabilize the function reference ---
+  // Use useCallback to keep the function reference stable
   const loadUsers = useCallback(async () => {
     try {
       const data = await apiCall('/api/users');
@@ -52,12 +52,15 @@ export default function UserManagement() {
     } catch (err) {
       setStatus({ msg: "Connection Lost", type: "error" });
     }
-  }, []); // Empty dependency array means this function never changes
+  }, []);
 
-  // --- FIXED: Add loadUsers to dependency array ---
+  // --- FIXED: Updated useEffect ---
+  // We use an empty dependency array [] to ensure it runs only ONCE on mount.
+  // We disable the lint warning because we know loadUsers is safe (it doesn't use volatile state).
   useEffect(() => { 
     loadUsers(); 
-  }, [loadUsers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
