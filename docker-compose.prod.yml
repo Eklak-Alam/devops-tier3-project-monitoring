@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  # --- APP STACK ---
+  backend:
+    image: your_dockerhub_username/gaprio-backend:latest
+    restart: always
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=webapp
+      - CORS_ORIGIN=*
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+    networks:
+      - gaprio_net
+
+  frontend:
+    image: your_dockerhub_username/gaprio-frontend:latest
+    restart: always
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+    ports:
+      - "3000:3000"
+    networks:
+      - gaprio_net
+
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: webapp
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - gaprio_net
+
+  # --- MONITORING STACK ---
+  prometheus:
+    image: prom/prometheus:latest
+    restart: always
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090" # Access at http://YOUR_IP:9090
+    networks:
+      - gaprio_net
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    ports:
+      - "3001:3000" # Access at http://YOUR_IP:3001 (Default User: admin/admin)
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - gaprio_net
+
+volumes:
+  mysql_data:
+  grafana_data:
+
+networks:
+  gaprio_net:
+    driver: bridge

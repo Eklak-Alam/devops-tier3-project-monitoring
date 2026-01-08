@@ -1,0 +1,57 @@
+---
+- name: Setup Full DevOps Server
+  hosts: webservers
+  become: true
+  vars:
+    project_dir: "/home/ubuntu/gaprio-app"
+
+  tasks:
+    # 1. Install Docker & Dependencies
+    - name: Install System Packages
+      apt:
+        name: [docker.io, docker-compose, git, python3-pip]
+        state: present
+        update_cache: yes
+
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add Ubuntu user to Docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    # 2. Setup Project Folder
+    - name: Create Project Directory
+      file:
+        path: "{{ project_dir }}"
+        state: directory
+        mode: '0755'
+        owner: ubuntu
+        group: ubuntu
+
+    # 3. Copy Configuration Files (Infrastructure as Code)
+    # We copy these from your LOCAL machine to the SERVER
+    - name: Copy Docker Compose
+      copy:
+        src: ../docker-compose.prod.yml
+        dest: "{{ project_dir }}/docker-compose.yml"
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Copy Prometheus Config
+      copy:
+        src: ../monitoring/prometheus.yml
+        dest: "{{ project_dir }}/prometheus.yml"
+        owner: ubuntu
+        group: ubuntu
+
+    # 4. Login to Docker Hub (So we can pull private images)
+    # Note: Pass these vars when running the playbook command
+    - name: Login to Docker Hub
+      shell: "echo {{ docker_password }} | docker login -u {{ docker_username }} --password-stdin"
+      no_log: true

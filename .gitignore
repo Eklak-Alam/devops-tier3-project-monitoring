@@ -1,0 +1,59 @@
+# ==========================
+# 1. GLOBAL / SYSTEM FILES
+# ==========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ==========================
+# 2. ENVIRONMENT VARIABLES (CRITICAL)
+# ==========================
+# Never push .env files to GitHub
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+frontend/.env.local
+
+# ==========================
+# 3. BACKEND (Node.js)
+# ==========================
+backend/node_modules/
+backend/dist/
+backend/coverage/
+
+# ==========================
+# 4. FRONTEND (Next.js)
+# ==========================
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+
+# ==========================
+# 5. TERRAFORM (Secrets & State)
+# ==========================
+# Ignore the secret variable file you just created
+terraform/secrets.tfvars
+terraform/*.tfvars
+
+# Ignore Terraform state files (They contain sensitive data)
+terraform/*.tfstate
+terraform/*.tfstate.backup
+
+# Ignore Terraform plugins folder
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+
+# ==========================
+# 6. ANSIBLE
+# ==========================
+ansible/*.retry
