@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 // --- 1. CONFIGURATION & HELPERS ---
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
@@ -43,7 +43,8 @@ export default function UserManagement() {
   const [editingId, setEditingId] = useState(null);
   const [status, setStatus] = useState({ msg: "Initializing...", type: "idle" });
 
-  const loadUsers = async () => {
+  // --- FIXED: Use useCallback to stabilize the function reference ---
+  const loadUsers = useCallback(async () => {
     try {
       const data = await apiCall('/api/users');
       setUsers(Array.isArray(data) ? data : []);
@@ -51,9 +52,12 @@ export default function UserManagement() {
     } catch (err) {
       setStatus({ msg: "Connection Lost", type: "error" });
     }
-  };
+  }, []); // Empty dependency array means this function never changes
 
-  useEffect(() => { loadUsers(); }, []);
+  // --- FIXED: Add loadUsers to dependency array ---
+  useEffect(() => { 
+    loadUsers(); 
+  }, [loadUsers]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
