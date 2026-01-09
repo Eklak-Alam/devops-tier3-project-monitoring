@@ -2,54 +2,52 @@ pipeline {
     agent any
 
     environment {
-        // --- 1. SERVER DETAILS ---
+        // --- 1. CONFIGURATION ---
         APP_SERVER_IP   = '13.201.73.113'
-        // The directory you manually created on the server
         PROJECT_DIR     = '/home/ubuntu/devops-tier3-project-monitoring'
-
-        // --- 2. CREDENTIAL IDs (From Jenkins) ---
+        
+        // --- 2. CREDENTIALS ---
         DOCKER_CREDS_ID = 'docker-hub-login'
         SSH_KEY_ID      = 'ec2-ssh-key'
+        
+        // --- 3. SECRETS (Ideally put these in Jenkins Credentials, but defined here for simplicity) ---
+        // In a real job, use credentials('db-password')
+        DB_PASS_VAL     = 'Eklakalam@7070' 
     }
 
     stages {
         // ----------------------------------------------------------------
-        // STAGE 1: CHECKOUT SCM
+        // STAGE 1: CHECKOUT
         // ----------------------------------------------------------------
         stage('Checkout Code') {
             steps {
                 echo "📥 Cloning Repository..."
-                // Make sure this URL matches your Git Repo exactly
                 git branch: 'main', url: 'https://github.com/Eklak-Alam/devops-tier3-project-monitoring.git'
             }
         }
 
         // ----------------------------------------------------------------
-        // STAGE 2: BUILD & PUSH (Dynamic & Secure)
+        // STAGE 2: BUILD & PUSH
         // ----------------------------------------------------------------
-        stage('Build & Push Docker Images') {
+        stage('Build & Push Images') {
             steps {
                 script {
-                    // 🔐 Extract Username (DUSER) & Password (DPASS) from Jenkins Credentials
                     withCredentials([usernamePassword(credentialsId: DOCKER_CREDS_ID, passwordVariable: 'DPASS', usernameVariable: 'DUSER')]) {
                         
-                        echo "🐳 Logging into Docker Hub as '${DUSER}'..."
+                        echo "🐳 Logging into Docker Hub..."
                         sh "echo $DPASS | docker login -u $DUSER --password-stdin"
                         
-                        // --- DEFINE EXACT IMAGE NAMES ---
-                        // This matches: eklakalam/devops-tier3-monitoring-backend
                         def backendImg  = "${DUSER}/devops-tier3-monitoring-backend"
                         def frontendImg = "${DUSER}/devops-tier3-monitoring-frontend"
 
-                        // --- BACKEND BUILD ---
-                        echo "🔨 Building Backend Image: ${backendImg}"
-                        // Assuming your git folder is named 'backend'
+                        // --- BACKEND ---
+                        echo "🔨 Building Backend..."
                         sh "docker build -t ${backendImg}:latest ./backend"
                         sh "docker push ${backendImg}:latest"
 
-                        // --- FRONTEND BUILD ---
-                        echo "🔨 Building Frontend Image: ${frontendImg}"
-                        // Assuming your git folder is named 'frontend'
+                        // --- FRONTEND ---
+                        echo "🔨 Building Frontend..."
+                        // We bake the IP into the frontend at build time
                         sh "docker build --build-arg NEXT_PUBLIC_API_URL=http://${APP_SERVER_IP}:5000 -t ${frontendImg}:latest ./frontend"
                         sh "docker push ${frontendImg}:latest"
                     }
@@ -58,27 +56,45 @@ pipeline {
         }
 
         // ----------------------------------------------------------------
-        // STAGE 3: DEPLOY (Remote Update)
+        // STAGE 3: DEPLOY (Copy Configs + Generate Env + Restart)
         // ----------------------------------------------------------------
-        stage('Deploy to App Server') {
+        stage('Deploy to Production') {
             steps {
                 sshagent([SSH_KEY_ID]) {
-                    echo "🚀 Connecting to Server (${APP_SERVER_IP}) to update containers..."
+                    echo "🚀 Deploying to ${APP_SERVER_IP}..."
+                    
+                    // 1. Ensure Directory Exists on Remote Server
+                    sh "ssh -o StrictHostKeyChecking=no ubuntu@${APP_SERVER_IP} 'mkdir -p ${PROJECT_DIR}'"
+
+                    // 2. Securely Copy Configuration Files (Infrastructure as Code)
+                    // We copy docker-compose and the monitoring config so the server is always synced with Git
+                    sh "scp -o StrictHostKeyChecking=no docker-compose.yml ubuntu@${APP_SERVER_IP}:${PROJECT_DIR}/docker-compose.yml"
+                    
+                    // Assuming your prometheus.yml is in a folder named 'monitoring' in your git repo
+                    // If it's in root, remove 'monitoring/' from the source path
+                    sh "scp -o StrictHostKeyChecking=no monitoring/prometheus.yml ubuntu@${APP_SERVER_IP}:${PROJECT_DIR}/prometheus.yml"
+
+                    // 3. Remote Execution
                     sh """
                         ssh -o StrictHostKeyChecking=no ubuntu@${APP_SERVER_IP} '
-                            
-                            # 1. Navigate to the folder you created
-                            cd ${PROJECT_DIR} || exit 1
-                            
-                            # 2. Pull the latest images we just pushed
-                            echo "📥 Pulling updates..."
+                            cd ${PROJECT_DIR}
+
+                            echo "⚙️  Generating dynamic .env file..."
+                            # We overwrite the .env file with fresh values from Jenkins
+                            echo "DB_HOST=db" > .env
+                            echo "DB_USER=root" >> .env
+                            echo "DB_PASSWORD=${DB_PASS_VAL}" >> .env
+                            echo "DB_NAME=webapp" >> .env
+                            echo "DB_PORT=3306" >> .env
+                            echo "SERVER_IP=${APP_SERVER_IP}" >> .env
+
+                            echo "📥 Pulling latest images..."
                             sudo docker-compose pull
-                            
-                            # 3. Restart Containers (Updates the app)
-                            echo "🔄 Restarting application..."
+
+                            echo "🔄 Restarting services..."
+                            # --remove-orphans ensures deleted services in docker-compose are removed
                             sudo docker-compose up -d --remove-orphans
-                            
-                            # 4. Cleanup old images to save space
+
                             echo "🧹 Pruning old images..."
                             sudo docker image prune -f
                         '

@@ -6,6 +6,7 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
+  # "backend" here refers to the SERVICE NAME in docker-compose
   - job_name: 'backend_api'
     static_configs:
       - targets: ['backend:5000']
