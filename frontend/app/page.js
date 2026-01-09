@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 // --- 1. CONFIGURATION & HELPERS ---
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://13.233.120.239:5000';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://13.204.82.99:5000';
 
 const apiCall = async (endpoint, method = 'GET', body = null) => {
   try {
