@@ -1,65 +1,74 @@
 version: '3.8'
 
 services:
-  # 1. DATABASE SERVICE
+  # --- BACKEND ---
+  backend:
+    image: eklakalam/devops-tier3-monitoring-backend:latest
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=${DB_PASSWORD}  # <--- Injected from .env
+      - DB_NAME=webapp
+    depends_on:
+      - db
+    networks:
+      - gaprio_net
+
+  # --- FRONTEND ---
+  frontend:
+    image: eklakalam/devops-tier3-monitoring-frontend:latest
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      # CRITICAL: This allows the browser to find your API on the public internet
+      - NEXT_PUBLIC_API_URL=http://${SERVER_IP}:5000 
+    networks:
+      - gaprio_net
+
+  # --- DATABASE ---
   db:
     image: mysql:8.0
-    container_name: production_db
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME}
-    ports:
-      - "${DB_PORT}:3306"
+      MYSQL_DATABASE: webapp
     volumes:
-      - db_data:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
     networks:
-      - app_network
-    healthcheck:
-      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
-      timeout: 20s
-      retries: 10
+      - gaprio_net
 
-  # 2. BACKEND SERVICE
-  backend:
-    build: ./backend
-    container_name: production_backend
+  # --- MONITORING ---
+  prometheus:
+    image: prom/prometheus:latest
     restart: always
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      - PORT=5000
-      - DB_HOST=db
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - DB_PORT=3306
-      - CORS_ORIGIN=*
+    volumes:
+      # We will SCP this file to the server in the pipeline
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
-      - "${BACKEND_PORT}:5000"
+      - "9090:9090"
     networks:
-      - app_network
+      - gaprio_net
 
-  # 3. FRONTEND SERVICE
-  frontend:
-    build: ./frontend
-    container_name: production_frontend
+  grafana:
+    image: grafana/grafana:latest
     restart: always
-    depends_on:
-      - backend
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:5000
     ports:
-      - "${FRONTEND_PORT}:3000"
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana_data:/var/lib/grafana
     networks:
-      - app_network
+      - gaprio_net
 
-# Persistent Storage for Database
 volumes:
-  db_data:
+  mysql_data:
+  grafana_data:
 
-# Internal Network so containers can talk
 networks:
-  app_network:
+  gaprio_net:
     driver: bridge

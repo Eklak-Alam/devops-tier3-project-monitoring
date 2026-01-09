@@ -2,54 +2,85 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB = 'your_dockerhub_username'
-        IMAGE_BACKEND = "${DOCKER_HUB}/gaprio-backend"
-        IMAGE_FRONTEND = "${DOCKER_HUB}/gaprio-frontend"
-        SERVER_IP = '13.233.xx.xx' // Your EC2 IP
-        SSH_KEY = 'ec2-ssh-key'     // Jenkins Credential ID
+        // --- 1. SERVER DETAILS ---
+        APP_SERVER_IP   = '13.201.73.113'
+        // The directory you manually created on the server
+        PROJECT_DIR     = '/home/ubuntu/devops-tier3-project-monitoring'
+
+        // --- 2. CREDENTIAL IDs (From Jenkins) ---
+        DOCKER_CREDS_ID = 'docker-hub-login'
+        SSH_KEY_ID      = 'ec2-ssh-key'
     }
 
     stages {
-        // STAGE 1: Build & Test
-        stage('Build & Push Images') {
+        // ----------------------------------------------------------------
+        // STAGE 1: CHECKOUT SCM
+        // ----------------------------------------------------------------
+        stage('Checkout Code') {
+            steps {
+                echo "📥 Cloning Repository..."
+                // Make sure this URL matches your Git Repo exactly
+                git branch: 'main', url: 'https://github.com/Eklak-Alam/devops-tier3-project-monitoring.git'
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // STAGE 2: BUILD & PUSH (Dynamic & Secure)
+        // ----------------------------------------------------------------
+        stage('Build & Push Docker Images') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DUSER', passwordVariable: 'DPASS')]) {
+                    // 🔐 Extract Username (DUSER) & Password (DPASS) from Jenkins Credentials
+                    withCredentials([usernamePassword(credentialsId: DOCKER_CREDS_ID, passwordVariable: 'DPASS', usernameVariable: 'DUSER')]) {
+                        
+                        echo "🐳 Logging into Docker Hub as '${DUSER}'..."
                         sh "echo $DPASS | docker login -u $DUSER --password-stdin"
                         
-                        // Backend
-                        sh "docker build -t ${IMAGE_BACKEND}:latest ./backend"
-                        sh "docker push ${IMAGE_BACKEND}:latest"
+                        // --- DEFINE EXACT IMAGE NAMES ---
+                        // This matches: eklakalam/devops-tier3-monitoring-backend
+                        def backendImg  = "${DUSER}/devops-tier3-monitoring-backend"
+                        def frontendImg = "${DUSER}/devops-tier3-monitoring-frontend"
 
-                        // Frontend (Pass build args)
-                        sh "docker build --build-arg NEXT_PUBLIC_API_URL=http://localhost:5000 -t ${IMAGE_FRONTEND}:latest ./frontend"
-                        sh "docker push ${IMAGE_FRONTEND}:latest"
+                        // --- BACKEND BUILD ---
+                        echo "🔨 Building Backend Image: ${backendImg}"
+                        // Assuming your git folder is named 'backend'
+                        sh "docker build -t ${backendImg}:latest ./backend"
+                        sh "docker push ${backendImg}:latest"
+
+                        // --- FRONTEND BUILD ---
+                        echo "🔨 Building Frontend Image: ${frontendImg}"
+                        // Assuming your git folder is named 'frontend'
+                        sh "docker build --build-arg NEXT_PUBLIC_API_URL=http://${APP_SERVER_IP}:5000 -t ${frontendImg}:latest ./frontend"
+                        sh "docker push ${frontendImg}:latest"
                     }
                 }
             }
         }
 
-        // STAGE 2: Deploy to EC2
-        stage('Deploy to Production') {
+        // ----------------------------------------------------------------
+        // STAGE 3: DEPLOY (Remote Update)
+        // ----------------------------------------------------------------
+        stage('Deploy to App Server') {
             steps {
-                sshagent([SSH_KEY]) {
+                sshagent([SSH_KEY_ID]) {
+                    echo "🚀 Connecting to Server (${APP_SERVER_IP}) to update containers..."
                     sh """
-                        ssh -o StrictHostKeyChecking=no ubuntu@${SERVER_IP} '
-                            cd /home/ubuntu/gaprio-app
+                        ssh -o StrictHostKeyChecking=no ubuntu@${APP_SERVER_IP} '
                             
-                            # Update .env file dynamically
-                            echo "DB_HOST=db" > .env
-                            echo "DB_PASSWORD=Eklakalam@7070" >> .env
-                            echo "NODE_ENV=production" >> .env
+                            # 1. Navigate to the folder you created
+                            cd ${PROJECT_DIR} || exit 1
                             
-                            # Pull new images
-                            docker-compose pull
+                            # 2. Pull the latest images we just pushed
+                            echo "📥 Pulling updates..."
+                            sudo docker-compose pull
                             
-                            # Restart containers (Update only)
-                            docker-compose up -d --remove-orphans
+                            # 3. Restart Containers (Updates the app)
+                            echo "🔄 Restarting application..."
+                            sudo docker-compose up -d --remove-orphans
                             
-                            # Cleanup space
-                            docker image prune -f
+                            # 4. Cleanup old images to save space
+                            echo "🧹 Pruning old images..."
+                            sudo docker image prune -f
                         '
                     """
                 }
