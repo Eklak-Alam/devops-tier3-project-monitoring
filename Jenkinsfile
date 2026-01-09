@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         // --- 1. CONFIGURATION ---
-        APP_SERVER_IP   = '13.201.73.113'
+        APP_SERVER_IP   = '13.233.120.239'
         PROJECT_DIR     = '/home/ubuntu/devops-tier3-project-monitoring'
         
         // --- 2. CREDENTIALS ---

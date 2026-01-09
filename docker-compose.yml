@@ -27,7 +27,7 @@ services:
     # Note: NEXT_PUBLIC_API_URL is mostly handled at build time in the Jenkinsfile,
     # but we pass it here just in case you switch to SSR later.
     environment:
-      - NEXT_PUBLIC_API_URL=http://${SERVER_IP}:5000
+      - NEXT_PUBLIC_API_URL=http://13.233.120.239:5000
     networks:
       - gaprio_net
 
