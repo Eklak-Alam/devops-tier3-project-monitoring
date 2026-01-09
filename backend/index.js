@@ -8,7 +8,6 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // 1. SECURITY & MIDDLEWARE
-// Optimized CORS: Allow specific origins in production, fallback to * for dev
 app.use(cors({
     origin: process.env.CORS_ORIGIN || '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -16,6 +15,45 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// --- ROBUST AUTO-INIT DATABASE (The Magic Part) ---
+// Helper to pause execution
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const initDb = async () => {
+    let retries = 10; // Try for 50 seconds (10 * 5s)
+    
+    while (retries > 0) {
+        try {
+            // 1. Check if we can connect at all
+            await pool.query("SELECT 1");
+            
+            // 2. If connected, run the table creation
+            const query = `
+                CREATE TABLE IF NOT EXISTS users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    email VARCHAR(255) NOT NULL UNIQUE,
+                    role VARCHAR(50) DEFAULT 'User',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `;
+            await pool.query(query);
+            console.log("✅ Database connected & Table 'users' verified/created.");
+            return; // Success! Exit the function.
+        } catch (err) {
+            console.log(`⏳ Database not ready yet... Retrying in 5s (${retries} attempts left)`);
+            console.error(`   Reason: ${err.message}`); // Optional: see why it failed
+            retries--;
+            await wait(5000); // Wait 5 seconds
+        }
+    }
+    console.error("❌ Could not connect to Database after 10 attempts. Exiting.");
+    process.exit(1); // Crash the container so Docker restarts it
+};
+
+// Run the retry logic immediately
+initDb();
 
 // 2. OBSERVABILITY (Prometheus)
 const register = new client.Registry();
@@ -43,7 +81,6 @@ app.get('/api/users', async (req, res) => {
 app.post('/api/users', async (req, res) => {
     const { name, email, role } = req.body;
     
-    // Input Validation
     if (!name || !email) {
         return res.status(400).json({ error: "Missing required fields: name, email" });
     }
@@ -60,7 +97,6 @@ app.post('/api/users', async (req, res) => {
             role: role || 'User' 
         });
     } catch (err) {
-        // Handle duplicate email error specifically
         if (err.code === 'ER_DUP_ENTRY') {
             return res.status(409).json({ error: "Email already exists" });
         }
@@ -114,7 +150,7 @@ app.get('/api/heavy', (req, res) => {
     }, delay);
 });
 
-// 4. GLOBAL ERROR HANDLER (Fail-Safe)
+// 4. GLOBAL ERROR HANDLER
 app.use((req, res) => {
     console.warn(`[404] Route Not Found: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ error: "Endpoint not found" });
@@ -125,11 +161,10 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
 
-// Graceful Shutdown (Best Practice for Docker)
 process.on('SIGTERM', () => {
     console.log('SIGTERM signal received: closing HTTP server');
     server.close(() => {
-        pool.end(); // Close DB pool
+        pool.end();
         console.log('HTTP server closed');
     });
 });
