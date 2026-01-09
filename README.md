@@ -11,8 +11,6 @@ A Production-Grade Fullstack Application with integrated **DevOps Monitoring Sta
 
 ## 🏗️ Architecture
 
-
-
 * **Frontend:** Next.js 14 (React) + Tailwind CSS + Framer Motion
 * **Backend:** Node.js + Express.js
 * **Database:** MySQL 8.0
